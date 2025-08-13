@@ -18,7 +18,7 @@ Next generation autonomous AI agent for end-to-end testing of web & desktop
 
 First, [fork this repository](https://github.com/testdriverai/quickstart-web/fork).
 
-> TestDriver requires an API key. Get one by signing up at app.testdriver.ai and start your 7-day trial.
+> TestDriver requires an API key. Get one by signing up at [app.testdriver.ai](https://app.testdriver.ai) and start your 7-day trial.
 
 ## Test Generation
 

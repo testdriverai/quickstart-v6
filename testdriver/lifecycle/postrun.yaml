@@ -1,8 +1,15 @@
 version: 6.0.0
 session: 67f00511acbd9ccac373edf7
 steps:
+  # Sample POSTRUN script
+  # Runs AFTER each test in the suite
+  # to run other scripts when provisioning a machine, see provision.yaml
+  # to run scripts before a test, see prerun.yaml
+  # Docs for `exec` command: https://docs.testdriver.ai/commands/exec
+  # Docs for lifecycle scripts: https://docs.testdriver.ai/guide/lifecycle
   - prompt: send dashcam recording to server
+    # this script tells TestDriver Dashcam to send the recording to the server
     commands:
       - command: exec
         lang: pwsh
-        code: dashcam -t 's&s ${TD_THIS_FILE}' -p # optional add -k SOMEID for the id of a folder in your Projects page at app.testdriver.ai
+        code: dashcam -t 's&s ${TD_THIS_FILE}' -p # optional add `-k MYFOLDERID` for the id of a folder in your Projects page at app.testdriver.ai

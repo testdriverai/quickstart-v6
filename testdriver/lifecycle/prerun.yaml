@@ -1,9 +1,15 @@
 version: 6.0.0
 session: 67f00511acbd9ccac373edf7
 steps:
+  # Sample PRERUN script
+  # Runs BEFORE each test in the suite
+  # to run other scripts when provisioning a machine, see provision.yaml
+  # to run scripts after a test, see postrun.yaml
+  # Docs for `exec` command: https://docs.testdriver.ai/commands/exec
+  # Docs for lifecycle scripts: https://docs.testdriver.ai/guide/lifecycle
   - prompt: launch chrome for testing and setup dashcam
     commands:
-      # this script installs chrome for testing and sets up Dashcam for replays and logs
+      # this script installs chrome for testing with a userprofile that has password manager disabled and sets up TestDriver Dashcam for replays and logs
       - command: exec
         lang: pwsh
         code: |

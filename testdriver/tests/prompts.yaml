@@ -1,7 +1,18 @@
 version: 6.0.11-canary.203529a.0
 session: 6889209283b1d711961771ab
 steps:
-  - prompt: login to the app
-  - prompt: navigate to the companies section and update the company to X
-  - prompt: click the abc dropdown and select First Floor
+  # Starting from a file
+  # You can write your test plan/steps/exit criteria in a set of prompts like you see below instead of using the interactive mode (see mytest.yaml)
+  # TestDriver can also generate these prompts using the /generate command - see https://docs.testdriver.ai/features/generation
+  # These are the steps that will be executed in the test
+  # You can add more steps as needed and TestDriver will execute them in order, creating commands on the fly
+  # if you want to save these steps use the --heal and --write flags
+  # Docs for the `heal` command: https://docs.testdriver.ai/features/auto-healing
+  # --heal allows testdriver to automatically retry steps that fail
+  # --write will update this file with the working steps for the given prompts
+
+  - prompt: login to the app with ${TD_TEST_USERNAME} and ${TD_TEST_PASSWORD}
+  - prompt: navigate to the user profile page
+  - prompt: update the user profile with new information
+  - prompt: verify the user profile was updated successfully
   - prompt: do something else

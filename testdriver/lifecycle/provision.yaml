@@ -1,12 +1,18 @@
 version: 6.0.0
 session: sourceandsummitv6testing
 steps:
+  # Sample PROVISION script
+  # Runs ONCE when your VM is created
+  # to run other scripts before a test, see prerun.yaml
+  # to run scripts after a test, see postrun.yaml
+  # Docs for exec command: https://docs.testdriver.ai/commands/exec
+  # Docs for lifecycle scripts: https://docs.testdriver.ai/guide/lifecycle
   - prompt: "Provision"
     commands:
       - command: exec
         lang: pwsh
-        code:
-          | # pull down files from drive or a github repo https://drive.google.com/file/d/1G-FEUF9AoC8cw6O1DwZSfcHl6peZDuHz/view?usp=drive_link
+        # this script will pull down files from Google drive or a github repo to add to the vm during provisioning
+        code: |
           # Google Drive file ID from the shared link
           $fileId = "1G-FEUF9AoC8cw6O1DwZSfcHl6peZDuHz"
 

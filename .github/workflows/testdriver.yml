@@ -82,7 +82,11 @@ jobs:
 
       - name: Run TestDriver
         # run the testdriver command with the test file for each file in the matrix
+        # you can add --heal and --write flags to the command to automatically heal
+        # for more information see https://docs.testdriver.ai/features/auto-healing
+        # and https://docs.testdriver.ai/getting-started/ci
         run: npx testdriverai@${{ env.TD_VERSION }} run ${{ matrix.test.path }}
+        # set any of your varialbes from your .env file here based on the secrets you set in your repo
         env:
           FORCE_COLOR: "3"
           TD_TEST_USERNAME: ${{ secrets.TD_TEST_USERNAME }}

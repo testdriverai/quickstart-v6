@@ -1,11 +1,10 @@
 version: 6.0.11
 session: 6893a25b20e694a171f7757c
 steps:
-  - prompt: navigate to ${TD_WEBSITE}
-    commands:
-      - command: press-keys
-        keys:
-          - enter
+  # the website will be loaded in the browser before the first step so you don't need to open it - see prerun.yaml
+  # these steps were generated using the TestDriver sandbox page at https://testdriver-sandbox.vercel.app/
+  # see the .env.example file for the TD_WEBSITE variable
+  # to create a test, run npx testdriverai@latest testdriver/tests/mytest.yaml and enter a prompt like you see below. The test file will be saved like this one. For more info see https://docs.testdriver.ai/interactive/explore
   - prompt: >-
       log in using ${TD_TEST_USERNAME} and ${TD_TEST_PASSWORD} and add a product to the
       cart

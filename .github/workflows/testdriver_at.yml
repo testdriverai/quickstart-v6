@@ -181,7 +181,7 @@ jobs:
                 "fields": {
                   "Pass": "$pass_str",
                   "Result Summary": ${{ steps.run_test.outputs.summary_json }},
-                  "RunId": "${{ steps.run_test.outputs.run_id }}",
+                  "RunID": "${{ steps.run_test.outputs.run_id }}",
                   "SHA": "$short_sha",
                   "Branch": "$branch_ref",
                   "Prompt": "/run ${{ matrix.test.name }}",

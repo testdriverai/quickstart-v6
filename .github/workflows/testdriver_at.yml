@@ -143,6 +143,7 @@ jobs:
           short_sha="${GITHUB_SHA:0:7}"
           branch_ref="$GITHUB_REF"
           repo_slug="$GITHUB_REPOSITORY"
+          workflow_name="$GITHUB_WORKFLOW"
 
           # String Pass from exit code
           if [ "${{ steps.run_test.outputs.exit_code }}" -eq 0 ]; then
@@ -176,8 +177,9 @@ jobs:
                   "Version": "latest",
                   "Platform": "windows",
                   "Duration": ${{ steps.run_test.outputs.duration_ms }},
-                  "Replay": "${{ steps.run_test.outputs.dashcam_url }}"
-                  "Repo": "$repo_slug"
+                  "Replay": "${{ steps.run_test.outputs.dashcam_url }}",
+                  "Repo": "$repo_slug",
+                  "Test": "$workflow_name"
                 }
               }
             ], typecast: true

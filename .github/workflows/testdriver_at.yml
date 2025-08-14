@@ -1,0 +1,183 @@
+name: TestDriver v6 Tests
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  # Schedules:
+  #  - 11:00 PM CT during DST (CDT, ~Mar–Oct) = 04:00 UTC next day
+  #  - 11:00 PM CT during Standard Time (CST, ~Nov–Feb) = 05:00 UTC next day
+  # Note: Local Mon/Tue/Thu/Fri at 11 PM occurs on UTC Tue/Wed/Fri/Sat.
+  schedule:
+    - cron: '0 4 * 3-10 TUE,WED,FRI,SAT'      # Mar–Oct (CDT)
+    - cron: '0 5 * 11-12,1-2 TUE,WED,FRI,SAT' # Nov–Feb (CST)
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Test folder or single file to run (e.g. debug or /tests/test_case.yaml). Do not include the testdriver folder in the path."
+        required: false
+        default: "tests"
+
+jobs:
+  gather:
+    name: Gather Test Files
+    runs-on: ubuntu-latest
+    outputs:
+      test_files: ${{ steps.test_list.outputs.files }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find test files from folder or specific file
+        id: test_list
+        run: |
+          # get the file(s) to test
+          if [[ "${{ github.event.inputs.target }}" != "" ]]; then
+            target_path="testdriver/${{ github.event.inputs.target }}"
+          else
+            target_path="testdriver/tests"
+          fi
+
+          echo "📍 Target path: $target_path"
+
+          if [[ -f "$target_path" ]]; then
+            echo "✅ Detected single file input."
+            files="$target_path"
+          elif [[ -d "$target_path" ]]; then
+            echo "✅ Detected folder input. Searching for .yml and .yaml files..."
+            files=$(find "$target_path" \( -name '*.yml' -o -name '*.yaml' \) | sort -V)
+          else
+            echo "❌ Error: '$target_path' is not a valid file or folder."
+            exit 1
+          fi
+
+          if [[ -z "$files" ]]; then
+            echo "❌ No test files found in $target_path"
+            exit 1
+          fi
+
+          files_json=$(echo "$files" | jq -R -s -c 'split("\n") | map(select(. != "") | {path: ., name: (. | split("/")[-1])})')
+
+          echo "$files"
+          echo "files=$files_json" >> $GITHUB_OUTPUT
+
+  test:
+    needs: gather
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test: ${{ fromJson(needs.gather.outputs.test_files) }}
+      max-parallel: 8
+      fail-fast: false
+    name: ${{ matrix.test.name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run TestDriver v6 and capture status
+        id: run_test
+        shell: bash
+        env:
+          FORCE_COLOR: "3"
+          TD_TEST_USERNAME: ${{ secrets.TD_TEST_USERNAME }}
+          TD_TEST_PASSWORD: ${{ secrets.TD_TEST_PASSWORD }}
+          TD_TEST_USERNAME_2: ${{ secrets.TD_TEST_USERNAME_2 }}
+          TD_TEST_PASSWORD_2: ${{ secrets.TD_TEST_PASSWORD_2 }}
+          TD_GMAIL_USERNAME: ${{ secrets.TD_GMAIL_USERNAME }}
+          TD_GMAIL_PASSWORD: ${{ secrets.TD_GMAIL_PASSWORD }}
+          TD_API_KEY: ${{ secrets.TESTDRIVER_API_KEY }}
+          TD_WEBSITE: ${{ secrets.TD_WEBSITE }}
+          TD_THIS_FILE: ${{ matrix.test.name }}
+        run: |
+          set +e
+          start_ms=$(($(date +%s%N)/1000000))
+
+          echo "▶️ Running: ${{ matrix.test.path }}"
+          npx testdriverai@latest run "${{ matrix.test.path }}" --summary=summary.md
+          exit_code=$?
+
+          end_ms=$(($(date +%s%N)/1000000))
+          duration_ms=$((end_ms - start_ms))
+
+          if [ $exit_code -eq 0 ]; then status="passed"; else status="failed"; fi
+
+          # Prepare outputs for later steps
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          echo "status=$status" >> $GITHUB_OUTPUT
+          echo "duration_ms=$duration_ms" >> $GITHUB_OUTPUT
+          echo "test_name=${{ matrix.test.name }}" >> $GITHUB_OUTPUT
+          echo "test_path=${{ matrix.test.path }}" >> $GITHUB_OUTPUT
+          echo "run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+          echo "run_id=$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+
+          # JSON-escape summary content (empty string if file missing)
+          if [[ -f summary.md ]]; then
+            summary_json=$(jq -Rs . < summary.md)
+          else
+            summary_json=$(jq -n --arg s "" '$s')
+          fi
+          echo "summary_json=$summary_json" >> $GITHUB_OUTPUT
+
+          echo "Test status: $status (exit code: $exit_code, duration: ${duration_ms}ms)"
+
+      - name: Upload summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-${{ matrix.test.name }}
+          path: summary.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Post results to Airtable
+        if: always()
+        shell: bash
+        env:
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
+          AIRTABLE_TABLE_NAME: ${{ secrets.AIRTABLE_TABLE_NAME }}
+        run: |
+          : "${AIRTABLE_API_KEY:?Missing AIRTABLE_API_KEY}"
+          : "${AIRTABLE_BASE_ID:?Missing AIRTABLE_BASE_ID}"
+          : "${AIRTABLE_TABLE_NAME:?Missing AIRTABLE_TABLE_NAME}"
+
+          short_sha="${GITHUB_SHA:0:7}"
+          branch_ref="$GITHUB_REF"
+          repo_slug="$GITHUB_REPOSITORY"
+
+          # Boolean Pass from exit code
+          if [ "${{ steps.run_test.outputs.exit_code }}" -eq 0 ]; then
+            pass_bool=true
+          else
+            pass_bool=false
+          fi
+
+          # Compose JSON payload (NOTE: booleans/numbers unquoted)
+          payload=$(cat <<EOF
+          {
+            "records": [
+              {
+                "fields": {
+                  "Pass": $pass_bool,
+                  "Exit Code": ${{ steps.run_test.outputs.exit_code }},
+                  "Result Summary": ${{ steps.run_test.outputs.summary_json }},
+                  "RunId": "${{ steps.run_test.outputs.run_id }}",
+                  "SHA": "$short_sha",
+                  "Branch": "$branch_ref",
+                  "Prompt": "/run ${{ matrix.test.name }}",
+                  "Version": "latest",
+                  "Platform": "windows",
+                  "Duration": ${{ steps.run_test.outputs.duration_ms }},
+                  "Repo": "$repo_slug"
+                }
+              }
+            ]
+          }
+          EOF
+          )
+
+          curl -sS -X POST "https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}" \
+            -H "Authorization: Bearer ${AIRTABLE_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data "$payload"

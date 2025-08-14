@@ -1,4 +1,4 @@
-name: TestDriver v6 Tests
+name: TestDriver CI to Airtable
 
 permissions:
   contents: read
@@ -135,12 +135,22 @@ jobs:
         shell: bash
         env:
           AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
-          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
-          AIRTABLE_TABLE_NAME: ${{ secrets.AIRTABLE_TABLE_NAME }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}   # e.g. appXXXXXXXXXXXXXX
+          AIRTABLE_TABLE_NAME: ${{ secrets.AIRTABLE_TABLE_NAME }} # or leave blank if using ID
+          AIRTABLE_TABLE_ID: ${{ secrets.AIRTABLE_TABLE_ID }} # optional: tblXXXXXXXXXXXXXX
         run: |
+          set -euo pipefail
+
           : "${AIRTABLE_API_KEY:?Missing AIRTABLE_API_KEY}"
           : "${AIRTABLE_BASE_ID:?Missing AIRTABLE_BASE_ID}"
-          : "${AIRTABLE_TABLE_NAME:?Missing AIRTABLE_TABLE_NAME}"
+
+          # Prefer table ID if provided, else URL-encode the name (handles spaces/symbols)
+          if [[ -n "${AIRTABLE_TABLE_ID:-}" ]]; then
+            table_segment="$AIRTABLE_TABLE_ID"
+          else
+            : "${AIRTABLE_TABLE_NAME:?Missing AIRTABLE_TABLE_NAME (or provide AIRTABLE_TABLE_ID)}"
+            table_segment="$(jq -rn --arg t "$AIRTABLE_TABLE_NAME" '$t|@uri')"
+          fi
 
           short_sha="${GITHUB_SHA:0:7}"
           branch_ref="$GITHUB_REF"
@@ -153,14 +163,23 @@ jobs:
             pass_bool=false
           fi
 
-          # Compose JSON payload (NOTE: booleans/numbers unquoted)
+          # Preflight: make sure the table route exists (should be 200)
+          preflight_code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            "https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${table_segment}?maxRecords=1" \
+            -H "Authorization: Bearer ${AIRTABLE_API_KEY}")
+          if [[ "$preflight_code" != "200" ]]; then
+            echo "Airtable route not reachable (HTTP $preflight_code)."
+            echo "Check AIRTABLE_BASE_ID, table name/ID, and PAT access/scopes."
+            exit 1
+          fi
+
+          # Compose JSON payload (booleans/numbers unquoted)
           payload=$(cat <<EOF
           {
             "records": [
               {
                 "fields": {
                   "Pass": $pass_bool,
-                  "Exit Code": ${{ steps.run_test.outputs.exit_code }},
                   "Result Summary": ${{ steps.run_test.outputs.summary_json }},
                   "RunId": "${{ steps.run_test.outputs.run_id }}",
                   "SHA": "$short_sha",
@@ -177,7 +196,8 @@ jobs:
           EOF
           )
 
-          curl -sS -X POST "https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${AIRTABLE_TABLE_NAME}" \
+          curl -sS -X POST "https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${table_segment}" \
             -H "Authorization: Bearer ${AIRTABLE_API_KEY}" \
             -H "Content-Type: application/json" \
             --data "$payload"
+

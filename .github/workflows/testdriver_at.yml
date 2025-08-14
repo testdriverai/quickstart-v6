@@ -156,11 +156,11 @@ jobs:
           branch_ref="$GITHUB_REF"
           repo_slug="$GITHUB_REPOSITORY"
 
-          # Boolean Pass from exit code
+          # String Pass from exit code
           if [ "${{ steps.run_test.outputs.exit_code }}" -eq 0 ]; then
-            pass_bool=true
+            pass_str="True"
           else
-            pass_bool=false
+            pass_str="False"
           fi
 
           # Preflight: make sure the table route exists (should be 200)
@@ -179,7 +179,7 @@ jobs:
             "records": [
               {
                 "fields": {
-                  "Pass": $pass_bool,
+                  "Pass": $pass_str,
                   "Result Summary": ${{ steps.run_test.outputs.summary_json }},
                   "RunId": "${{ steps.run_test.outputs.run_id }}",
                   "SHA": "$short_sha",

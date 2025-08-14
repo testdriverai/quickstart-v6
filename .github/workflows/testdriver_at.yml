@@ -78,48 +78,36 @@ jobs:
       - name: Run TestDriver v6 and capture status
         id: run_test
         shell: bash
-        env:
-          FORCE_COLOR: "3"
-          TD_TEST_USERNAME: ${{ secrets.TD_TEST_USERNAME }}
-          TD_TEST_PASSWORD: ${{ secrets.TD_TEST_PASSWORD }}
-          TD_TEST_USERNAME_2: ${{ secrets.TD_TEST_USERNAME_2 }}
-          TD_TEST_PASSWORD_2: ${{ secrets.TD_TEST_PASSWORD_2 }}
-          TD_GMAIL_USERNAME: ${{ secrets.TD_GMAIL_USERNAME }}
-          TD_GMAIL_PASSWORD: ${{ secrets.TD_GMAIL_PASSWORD }}
-          TD_API_KEY: ${{ secrets.TESTDRIVER_API_KEY }}
-          TD_WEBSITE: ${{ secrets.TD_WEBSITE }}
-          TD_THIS_FILE: ${{ matrix.test.name }}
         run: |
-          set +e
-          start_ms=$(($(date +%s%N)/1000000))
+            set +e
+            start_ms=$(($(date +%s%N)/1000000))
 
-          echo "▶️ Running: ${{ matrix.test.path }}"
-          npx testdriverai@latest run "${{ matrix.test.path }}" --summary=summary.md
-          exit_code=$?
+            echo "▶️ Running: ${{ matrix.test.path }}"
+            # Capture both stdout/stderr to a log while keeping live output
+            npx testdriverai@latest run "${{ matrix.test.path }}" --summary=summary.md 2>&1 | tee step_output.log
+            exit_code=${PIPESTATUS[0]}
 
-          end_ms=$(($(date +%s%N)/1000000))
-          duration_ms=$((end_ms - start_ms))
+            end_ms=$(($(date +%s%N)/1000000))
+            duration_ms=$((end_ms - start_ms))
+            if [ $exit_code -eq 0 ]; then status="passed"; else status="failed"; fi
 
-          if [ $exit_code -eq 0 ]; then status="passed"; else status="failed"; fi
+            # Extract Dashcam link from the log (case-insensitive, last one wins)
+            dashcam_url="$(grep -Eo -i 'https://app\.dashcam\.io/replay/[a-z0-9]+(\?share=[A-Za-z0-9]+)?' step_output.log | tail -n 1 || true)"
 
-          # Prepare outputs for later steps
-          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-          echo "status=$status" >> $GITHUB_OUTPUT
-          echo "duration_ms=$duration_ms" >> $GITHUB_OUTPUT
-          echo "test_name=${{ matrix.test.name }}" >> $GITHUB_OUTPUT
-          echo "test_path=${{ matrix.test.path }}" >> $GITHUB_OUTPUT
-          echo "run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
-          echo "run_id=$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+            echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+            echo "status=$status" >> $GITHUB_OUTPUT
+            echo "duration_ms=$duration_ms" >> $GITHUB_OUTPUT
+            echo "test_name=${{ matrix.test.name }}" >> $GITHUB_OUTPUT
+            echo "test_path=${{ matrix.test.path }}" >> $GITHUB_OUTPUT
+            echo "run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+            echo "run_id=$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+            echo "dashcam_url=$dashcam_url" >> $GITHUB_OUTPUT
 
-          # JSON-escape summary content (empty string if file missing)
-          if [[ -f summary.md ]]; then
-            summary_json=$(jq -Rs . < summary.md)
-          else
-            summary_json=$(jq -n --arg s "" '$s')
-          fi
-          echo "summary_json=$summary_json" >> $GITHUB_OUTPUT
+            # Summary to JSON string (may be empty)
+            if [[ -f summary.md ]]; then summary_json=$(jq -Rs . < summary.md); else summary_json=$(jq -n --arg s "" '$s'); fi
+            echo "summary_json=$summary_json" >> $GITHUB_OUTPUT
 
-          echo "Test status: $status (exit code: $exit_code, duration: ${duration_ms}ms)"
+            echo "Test status: $status (exit code: $exit_code, duration: ${duration_ms}ms)"
 
       - name: Upload summary artifact
         if: always()
@@ -188,10 +176,11 @@ jobs:
                   "Version": "latest",
                   "Platform": "windows",
                   "Duration": ${{ steps.run_test.outputs.duration_ms }},
+                  "Replay": "${{ steps.run_test.outputs.dashcam_url }}"
                   "Repo": "$repo_slug"
                 }
               }
-            ]
+            ], typecast: true
           }
           EOF
           )

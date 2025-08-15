@@ -137,7 +137,7 @@ jobs:
             table_segment="$(jq -rn --arg t "$AIRTABLE_TABLE_NAME" '$t|@uri')"
           fi
 
-          short_sha="${GITHUB_SHA}"
+          sha="${GITHUB_SHA}"
           branch_ref="$GITHUB_REF"
           repo_slug="$GITHUB_REPOSITORY"
           workflow_name="$GITHUB_WORKFLOW"

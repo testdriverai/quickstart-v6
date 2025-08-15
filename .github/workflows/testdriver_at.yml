@@ -5,13 +5,6 @@ permissions:
   pull-requests: read
 
 on:
-  # Schedules:
-  #  - 11:00 PM CT during DST (CDT, ~Mar–Oct) = 04:00 UTC next day
-  #  - 11:00 PM CT during Standard Time (CST, ~Nov–Feb) = 05:00 UTC next day
-  # Note: Local Mon/Tue/Thu/Fri at 11 PM occurs on UTC Tue/Wed/Fri/Sat.
-  schedule:
-    - cron: '0 4 * 3-10 TUE,WED,FRI,SAT'      # Mar–Oct (CDT)
-    - cron: '0 5 * 11-12,1-2 TUE,WED,FRI,SAT' # Nov–Feb (CST)
   workflow_dispatch:
     inputs:
       target:

@@ -74,7 +74,7 @@ jobs:
         env:
             FORCE_COLOR: "3"
             TD_WEBSITE: ${{ secrets.TD_WEBSITE }}
-            TD_API_KEY: ${{ secrets.TD_API_KEY }}
+            TD_API_KEY: ${{ secrets.TESTDRIVER_API_KEY }}
             TD_THIS_FILE: ${{ matrix.test.name }}
         run: |
             set +e
@@ -122,7 +122,6 @@ jobs:
         env:
           AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
           AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}   # e.g. appXXXXXXXXXXXXXX
-          AIRTABLE_TABLE_NAME: ${{ secrets.AIRTABLE_TABLE_NAME }} # or leave blank if using ID
           AIRTABLE_TABLE_ID: ${{ secrets.AIRTABLE_TABLE_ID }} # optional: tblXXXXXXXXXXXXXX
         run: |
           set -euo pipefail

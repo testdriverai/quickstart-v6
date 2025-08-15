@@ -183,6 +183,9 @@ jobs:
           }
           EOF
           )
+          echo "---- PAYLOAD (pretty) ----"
+          echo "$payload" | jq . || { echo "❌ Payload is not valid JSON"; exit 1; }
+          echo "--------------------------"
 
           curl -sS -X POST "https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${table_segment}" \
             -H "Authorization: Bearer ${AIRTABLE_API_KEY}" \

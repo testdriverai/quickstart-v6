@@ -78,6 +78,10 @@ jobs:
       - name: Run TestDriver v6 and capture status
         id: run_test
         shell: bash
+        env:
+            FORCE_COLOR: "3"
+            TD_WEBSITE: ${{ secrets.TD_WEBSITE }}
+            TD_THIS_FILE: ${{ matrix.test.name }}
         run: |
             set +e
             start_ms=$(($(date +%s%N)/1000000))

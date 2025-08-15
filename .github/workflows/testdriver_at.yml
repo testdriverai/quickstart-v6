@@ -137,7 +137,7 @@ jobs:
             table_segment="$(jq -rn --arg t "$AIRTABLE_TABLE_NAME" '$t|@uri')"
           fi
 
-          short_sha="${GITHUB_SHA:0:7}"
+          short_sha="${GITHUB_SHA}"
           branch_ref="$GITHUB_REF"
           repo_slug="$GITHUB_REPOSITORY"
           workflow_name="$GITHUB_WORKFLOW"
@@ -168,7 +168,7 @@ jobs:
                   "Pass": "$pass_str",
                   "Result Summary": ${{ steps.run_test.outputs.summary_json }},
                   "RunID": "${{ steps.run_test.outputs.run_id }}",
-                  "SHA": "$short_sha",
+                  "SHA": "$sha",
                   "Branch": "$branch_ref",
                   "Prompt": "/run ${{ matrix.test.name }}",
                   "Version": "latest",
@@ -183,9 +183,6 @@ jobs:
           }
           EOF
           )
-          echo "---- PAYLOAD (pretty) ----"
-          echo "$payload" | jq . || { echo "❌ Payload is not valid JSON"; exit 1; }
-          echo "--------------------------"
 
           curl -sS -X POST "https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${table_segment}" \
             -H "Authorization: Bearer ${AIRTABLE_API_KEY}" \

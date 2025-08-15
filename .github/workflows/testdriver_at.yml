@@ -78,6 +78,7 @@ jobs:
             TD_THIS_FILE: ${{ matrix.test.name }}
         run: |
             set +e
+            set -o pipefail
             start_ms=$(($(date +%s%N)/1000000))
 
             echo "▶️ Running: ${{ matrix.test.path }}"
@@ -106,6 +107,11 @@ jobs:
             echo "summary_json=$summary_json" >> $GITHUB_OUTPUT
 
             echo "Test status: $status (exit code: $exit_code, duration: ${duration_ms}ms)"
+             # 🔴 Make the step fail (and thus the job) if test failed
+            if [ $exit_code -ne 0 ]; then
+              echo "::error title=Test failed::Exit code $exit_code"
+              exit $exit_code
+            fi
 
       - name: Upload summary artifact
         if: always()

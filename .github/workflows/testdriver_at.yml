@@ -179,7 +179,7 @@ jobs:
                   "Test": "$workflow_name"
                 }
               }
-            ], typecast: true
+            ], "typecast": true
           }
           EOF
           )

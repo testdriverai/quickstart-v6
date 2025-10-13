@@ -32,3 +32,22 @@ steps:
           Write-Output "File downloaded to: $outputFilePath"
 
           exit
+      - command: exec
+        lang: pwsh
+        code: |
+          $WorkDir = Join-Path $env:TEMP "TestDriverChromeRunner"
+
+          Write-Host "Setting up work directory at $WorkDir..."
+          New-Item -ItemType Directory -Force -Path $WorkDir
+
+          Write-Host "Initializing npm project..."
+          npm init -y
+
+          Write-Host "Installing dependencies: @puppeteer/browsers and dashcam-chrome..."
+          npm install @puppeteer/browsers dashcam-chrome
+
+          Write-Host "Installing Chromium via '@puppeteer/browsers'..."
+          npx @puppeteer/browsers install chrome
+
+          Write-Host "Provision complete. WorkDir: $WorkDir"
+          exit

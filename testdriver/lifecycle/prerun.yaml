@@ -9,50 +9,44 @@ steps:
   # Docs for lifecycle scripts: https://docs.testdriver.ai/guide/lifecycle
   - prompt: launch chrome for testing and setup dashcam
     commands:
-      # this script installs chrome for testing with a userprofile that has password manager disabled and sets up TestDriver Dashcam for replays and logs
+      # this script starts chrome for testing with a userprofile that has password manager disabled and sets up TestDriver Dashcam for replays and logs
       - command: exec
         lang: pwsh
         code: |
-          Write-Host "Initializing new npm project..."
-
-          cd $env:TEMP
-          Write-Host "Changed directory to TEMP: $env:TEMP"
-
-          Write-Host "Running 'npm init -y'..."
-          npm init -y
-
-          Write-Host "Installing dependencies: @puppeteer/browsers and dashcam-chrome..."
-          npm install @puppeteer/browsers dashcam-chrome
-
-          Write-Host "Installing Chromium via '@puppeteer/browsers'..."
-          npx @puppeteer/browsers install chrome
-
-          # Define paths
+          $WorkDir = Join-Path $env:TEMP "TestDriverChromeRunner"
+          Write-Host "Working directory: $WorkDir"
+          # Paths that are deterministic from WorkDir
           $extensionPath = Join-Path (Get-Location) "node_modules/dashcam-chrome/build"
-          $profilePath = Join-Path $env:TEMP "chrome-profile-$(Get-Random)"
+
+          if (-not (Test-Path $extensionPath)) {
+            Write-Error "Dashcam extension not found at '$extensionPath'"
+            exit 1
+          }
+
+          # Fresh user-data-dir per launch
+          $profilePath = Join-Path $env:TEMP ("chrome-profile-{0}" -f (Get-Random))
 
           Write-Host "Extension path: $extensionPath"
           Write-Host "Chrome user data dir: $profilePath"
 
-          # Validate extension path
-          if (-not (Test-Path $extensionPath)) {
-              Write-Host "Extension not found at $extensionPath"
-          }
-
+          # Build Chrome args. Quote paths that may contain spaces.
           $chromeArgs = @(
             "--start-maximized",
-            "--load-extension=$extensionPath",
-            "--user-data-dir=$profilePath",
+            "--load-extension=""$extensionPath""",
+            "--user-data-dir=""$profilePath""",
             "--no-first-run",
             "--no-default-browser-check",
-            "--disable-infobars"
+            "--disable-infobars",
             "${TD_WEBSITE}"
-          ) -join ' '
+          )
 
-          Start-Process "cmd.exe" -ArgumentList "/c", "npx @puppeteer/browsers launch chrome -- $chromeArgs"
+          # Join into a single string for cmd.exe
+          $argString = ($chromeArgs -join ' ')
 
-          Write-Host "Script complete."
-          exit
+          # Launch via npx
+          Start-Process "cmd.exe" -ArgumentList "/c", "npx @puppeteer/browsers launch chrome -- $argString"
+
+          Write-Host "Launch script complete."
       - command: wait-for-text
         text: ${TD_WEBSITE}
         timeout: 120000

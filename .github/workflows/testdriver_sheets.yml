@@ -1,0 +1,155 @@
+name: TestDriver CI to Google Sheets (GCP API)
+
+permissions:
+    contents: read
+    pull-requests: read
+
+on:
+    workflow_dispatch:
+        inputs:
+            target:
+                description: "Test folder or single file to run (e.g. debug or /tests/test_case.yaml). Do not include the testdriver folder in the path."
+                required: false
+                default: "tests"
+
+jobs:
+    gather:
+        name: Gather Test Files
+        runs-on: ubuntu-latest
+        outputs:
+            test_files: ${{ steps.test_list.outputs.files }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Find test files from folder or specific file
+              id: test_list
+              run: |
+                  if [[ "${{ github.event.inputs.target }}" != "" ]]; then
+                    target_path="testdriver/${{ github.event.inputs.target }}"
+                  else
+                    target_path="testdriver/tests"
+                  fi
+
+                  if [[ -f "$target_path" ]]; then
+                    files="$target_path"
+                  elif [[ -d "$target_path" ]]; then
+                    files=$(find "$target_path" \( -name '*.yml' -o -name '*.yaml' \) | sort -V)
+                  else
+                    exit 1
+                  fi
+
+                  if [[ -z "$files" ]]; then
+                    exit 1
+                  fi
+
+                  files_json=$(echo "$files" | jq -R -s -c 'split("\n") | map(select(. != "") | {path: ., name: (. | split("/")[-1])})')
+                  echo "files=$files_json" >> $GITHUB_OUTPUT
+
+    test:
+        needs: gather
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                test: ${{ fromJson(needs.gather.outputs.test_files) }}
+            max-parallel: 8
+            fail-fast: false
+        name: ${{ matrix.test.name }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Run TestDriver v6 and capture status
+              id: run_test
+              shell: bash
+              env:
+                  FORCE_COLOR: "3"
+                  TD_WEBSITE: ${{ secrets.TD_WEBSITE }}
+                  TD_API_KEY: ${{ secrets.TESTDRIVER_API_KEY }}
+                  TD_THIS_FILE: ${{ matrix.test.name }}
+              run: |
+                  set +e
+                  set -o pipefail
+                  start_ms=$(($(date +%s%N)/1000000))
+                  npx testdriverai@latest run "${{ matrix.test.path }}" --summary=summary.md 2>&1 | tee step_output.log
+                  exit_code=${PIPESTATUS[0]}
+                  end_ms=$(($(date +%s%N)/1000000))
+                  duration_ms=$((end_ms - start_ms))
+                  if [ $exit_code -eq 0 ]; then status="passed"; else status="failed"; fi
+                  dashcam_url="$(grep -Eo -i 'https://app\.dashcam\.io/replay/[a-z0-9]+(\?share=[A-Za-z0-9]+)?' step_output.log | tail -n 1 || true)"
+                  echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+                  echo "status=$status" >> $GITHUB_OUTPUT
+                  echo "duration_ms=$duration_ms" >> $GITHUB_OUTPUT
+                  echo "test_name=${{ matrix.test.name }}" >> $GITHUB_OUTPUT
+                  echo "test_path=${{ matrix.test.path }}" >> $GITHUB_OUTPUT
+                  echo "run_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+                  echo "run_id=$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+                  echo "dashcam_url=$dashcam_url" >> $GITHUB_OUTPUT
+                  if [[ -f summary.md ]]; then summary_json=$(jq -Rs . < summary.md); else summary_json=$(jq -n --arg s "" '$s'); fi
+                  echo "summary_json=$summary_json" >> $GITHUB_OUTPUT
+                  if [ $exit_code -ne 0 ]; then
+                    exit $exit_code
+                  fi
+
+            - name: Upload summary artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: summary-${{ matrix.test.name }}
+                  path: summary.md
+                  if-no-files-found: warn
+                  retention-days: 30
+
+            # Authenticate to Google and append a row to the Sheet via Sheets API
+            - name: Google Auth (service account)
+              id: gcp_auth
+              uses: google-github-actions/auth@v2
+              with:
+                  service_account: ${{ secrets.GCP_SA_NAME }}
+                  token_format: "access_token"
+                  access_token_scopes: "https://www.googleapis.com/auth/spreadsheets"
+                  credentials_json: ${{ secrets.GCP_SA_CREDENTIALS }}
+
+            - name: Append row to Google Sheet
+              if: always()
+              shell: bash
+              env:
+                  ACCESS_TOKEN: ${{ steps.gcp_auth.outputs.access_token }}
+                  SHEETS_SPREADSHEET_ID: ${{ secrets.SHEETS_SPREADSHEET_ID }}
+                  SHEETS_RANGE: ${{ secrets.SHEETS_RANGE }} # e.g., Sheet1!A:L
+              run: |
+                  set -euo pipefail
+
+                  sha="${GITHUB_SHA}"
+                  branch_ref="$GITHUB_REF"
+                  repo_slug="$GITHUB_REPOSITORY"
+                  workflow_name="$GITHUB_WORKFLOW"
+
+                  if [ "${{ steps.run_test.outputs.exit_code }}" -eq 0 ]; then pass_str="True"; else pass_str="False"; fi
+                  summary_text=$(jq -r . <<< "${{ steps.run_test.outputs.summary_json }}")
+
+                  payload=$(jq -n \
+                    --arg pass "$pass_str" \
+                    --arg summary "$summary_text" \
+                    --arg runid "${{ steps.run_test.outputs.run_id }}" \
+                    --arg sha "$sha" \
+                    --arg branch "$branch_ref" \
+                    --arg prompt "/run ${{ matrix.test.name }}" \
+                    --arg version "latest" \
+                    --arg platform "windows" \
+                    --argjson duration ${{ steps.run_test.outputs.duration_ms }} \
+                    --arg replay "${{ steps.run_test.outputs.dashcam_url }}" \
+                    --arg repo "$repo_slug" \
+                    --arg test "$workflow_name" \
+                    '{
+                      majorDimension: "ROWS",
+                      values: [[
+                        $pass, $summary, $runid, $sha, $branch, $prompt, $version, $platform, $duration, $replay, $repo, $test
+                      ]]
+                    }')
+
+                  curl -sS -X POST \
+                    "https://sheets.googleapis.com/v4/spreadsheets/${SHEETS_SPREADSHEET_ID}/values/${SHEETS_RANGE}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS" \
+                    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+                    -H "Content-Type: application/json" \
+                    --data "${payload}"
